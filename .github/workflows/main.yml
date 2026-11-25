@@ -19,17 +19,37 @@ jobs:
       - name: Prepare Android Gradle Project
         run: |
           python3 - <<'PYEOF'
-          import os, glob, shutil, struct, zlib
+          import os, glob, shutil, struct, zlib, zipfile
 
           if os.path.exists("app/build.gradle.kts"):
               print("Full Android Gradle project detected.")
               raise SystemExit(0)
 
+          zip_files = [f for f in sorted(glob.glob("*.zip")) if os.path.isfile(f)]
+          if zip_files:
+              zpath = zip_files[0]
+              print(f"Extracting uploaded archive: {zpath}")
+              with zipfile.ZipFile(zpath, "r") as zf:
+                  for member in zf.infolist():
+                      if member.is_dir() or member.filename.startswith(".github/"):
+                          continue
+                      target = os.path.normpath(member.filename)
+                      if target.startswith("..") or os.path.isabs(target):
+                          continue
+                      parent = os.path.dirname(target)
+                      if parent:
+                          os.makedirs(parent, exist_ok=True)
+                      with zf.open(member) as src, open(target, "wb") as dst:
+                          shutil.copyfileobj(src, dst)
+              if os.path.exists("app/build.gradle.kts"):
+                  print("Extracted full Android Gradle project from ZIP.")
+                  raise SystemExit(0)
+
           html_source = "index.html" if os.path.exists("index.html") else next(
               (f for f in sorted(glob.glob("*.html")) if os.path.isfile(f)), None
           )
           if not html_source:
-              raise FileNotFoundError("No HTML game file found in repo root. Upload index.html first.")
+              raise FileNotFoundError("No HTML game file or Android ZIP found in repo root.")
 
           for d in [
               "app/src/main/assets/www",
